@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MNIST Digit Recognizer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { color: #333; margin-bottom: 5px; }
+        p { color: #666; margin-bottom: 30px; }
+        .container {
+            display: flex;
+            gap: 40px;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: black;
+            border-radius: 8px;
+            cursor: crosshair;
+        }
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        button, label {
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        .btn-clear { background-color: #e74c3c; color: white; }
+        .btn-predict { background-color: #2ecc71; color: white; }
+        .btn-upload { background-color: #3498db; color: white; display: inline-block; }
+        button:hover, label:hover { opacity: 0.9; }
+        #file-input { display: none; }
+        .result-box {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-left: 2px solid #eee;
+            padding-left: 40px;
+        }
+        #digit-output {
+            font-size: 96px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 10px 0;
+        }
+        #confidence-output {
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+        @media (max-width: 600px) {
+            .container { flex-direction: column; align-items: center; }
+            .result-box { border-left: none; border-top: 2px solid #eee; padding-left: 0; padding-top: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>MNIST Digit Recognizer</h1>
+    <p>Draw a number in the box or upload an image to test the deep learning model.</p>
+
+    <div class="container">
+        <!-- Interactive Drawing / Upload Area -->
+        <div class="box">
+            <canvas id="canvas" width="280" height="280"></canvas>
+            <div class="controls">
+                <button class="btn-clear" onclick="clearCanvas()">Clear</button>
+                <button class="btn-predict" onclick="predictDrawing()">Predict Drawing</button>
+                <label class="btn-upload" for="file-input">Upload Image</label>
+                <input type="file" id="file-input" accept="image/*" onchange="predictUploadedFile(event)">
+            </div>
+        </div>
+
+        <!-- Real-Time Prediction Output -->
+        <div class="result-box">
+            <h3>Prediction Result</h3>
+            <div id="digit-output">-</div>
+            <div id="confidence-output">Confidence: --</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+
+        // Configure drawing line style
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 16;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Drawing Event Listeners
+        canvas.addEventListener('mousedown', (e) => { isDrawing = true; draw(e); });
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', () => { isDrawing = false; ctx.beginPath(); });
+        canvas.addEventListener('mouseleave', () => { isDrawing = false; ctx.beginPath(); });
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        }
+
+        function clearCanvas() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('digit-output').innerText = '-';
+            document.getElementById('confidence-output').innerText = 'Confidence: --';
+        }
+        
+        // Initialize canvas with black background
+        clearCanvas();
+
+        // Send canvas image to Backend API
+        async function predictDrawing() {
+            canvas.toBlob(async (blob) => {
+                sendImageToBackend(blob);
+            }, 'image/png');
+        }
+
+        // Send uploaded image file to Backend API
+        async function predictUploadedFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                sendImageToBackend(file);
+            }
+        }
+
+        // Unified function to handle API calls
+        async function sendImageToBackend(imageSource) {
+            const formData = new FormData();
+            formData.append('image', imageSource, 'digit.png');
+
+            document.getElementById('digit-output').innerText = '...';
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.prediction !== undefined) {
+                    document.getElementById('digit-output').innerText = data.prediction;
+                    document.getElementById('confidence-output').innerText = `Confidence: ${data.confidence}`;
+                } else {
+                    alert('Error running prediction: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Could not connect to the backend server.');
+            }
+        }
+    </script>
+</body>
+</html>
